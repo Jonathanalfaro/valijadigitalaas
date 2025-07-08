@@ -31,6 +31,7 @@ class ValijaDigitalConfig:
         self.TESSERACT_PATH = os.getenv('TESSERACT_PATH')
         self.DATABASE_PATH = os.getenv('DATABASE_PATH')
         self.LOG_FILENAME = os.getenv('LOG_FILENAME')
+        self.PINES_CSV = os.getenv('PINES_CSV')
         
         self.MESES = {
             '01': 'ENERO', '02': 'FEBRERO', '03': 'MARZO', '04': 'ABRIL',
@@ -186,6 +187,44 @@ class CSVManager:
             return {}
         except Exception as e:
             logging.error(e)
+
+    def get_pin_csv(self):
+        pines_dict = {}
+        try:
+            pines_file = self.config.PINES_CSV
+            with open(pines_file, newline='') as csvfile:
+                csv_pin = csv.reader(csvfile, skipinitialspace=True)
+                try:
+                    for row in csv_pin:
+                        sucursal = row[0]
+                        pin = row[1]
+                        pines = pines_dict[sucursal] if sucursal in pines_dict else []
+                        pines.append(pin)
+                        pines_dict.update({sucursal:pines})
+                except IndexError:
+                    pass
+                except Exception as e:
+                    logging.error(e)
+                    pass
+                return pines_dict
+        except FileNotFoundError:
+            logging.error('No se encontró el archivo de pines')
+            return pines_dict
+        except Exception as e:
+            logging.error(e)
+            return pines_dict
+
+    def valida_pin(self, pin, sucursal, dict_pines):
+        if not sucursal in dict_pines.keys():
+            logging.debug('Pin inválido para esa sucursal.')
+            return False
+        else:
+            if not pin in dict_pines[sucursal]:
+                logging.info('Pin inválido.')
+                return False
+            else:
+                logging.info('Pin válido')
+                return True
 
     def get_proveedores_csv(self):
         proveedores = []
@@ -409,6 +448,13 @@ class FileManager:
     def _number_generator(self, path_archivo_destino):
         directorio, archivo = os.path.split(path_archivo_destino)
         nombre_archivo, extension = os.path.splitext(archivo)
+        try:
+            re_archivo = re.search('_\d{6}', nombre_archivo)
+            if re_archivo:
+                numero_archivo = re_archivo.group(0)
+                nombre_archivo = nombre_archivo.replace(numero_archivo, '')
+        except Exception as e:
+            logging.error(f'Error al obtener el número del archivo: {e}')
         for i in range(1, 100000):
             path_aux = os.path.join(directorio, f'{nombre_archivo}_{i:06}{extension}')
             if not os.path.exists(path_aux):
@@ -448,7 +494,7 @@ class PathManager:
 
         # Obtener número de serie
         try:
-            numero_serie = nombre_archivo.split('-')[0]
+            numero_serie = nombre_archivo.split('-')[1]
         except IndexError:
             logging.error('Nombre de archivo inválido')
             raise ValueError
@@ -606,6 +652,29 @@ class FileObserver(FileSystemEventHandler):
             return
 
         try:
+            pines_validos = self.csv_manager.get_pin_csv()
+            if not pines_validos:
+                logging.error('No se pudieron obtener los pines.')
+                return
+            numero_serie = nombre_archivo.split('-')[1]
+            _sucursal, _ = self.csv_manager.get_sucursal_csv(numero_serie)
+            if not _sucursal:
+                logging.error('No se encontró la sucursal')
+                return
+            pin = nombre_archivo.split('-')[0]
+            if re.match('^\d{4}$', pin) is None:
+                logging.info('Formato de pin inválido.')
+                return
+            pin_valido = self.csv_manager.valida_pin(pin, _sucursal, pines_validos)
+            if not pin_valido:
+                logging.info('Pin inválido. Omitiendo el archivo')
+                return
+        except Exception as e:
+            logging.error(f'Error al obtener el pin {e}')
+            return
+
+
+        try:
             nombre, nuevo_path, flujo, sucursal, complemento = self.path_manager.crea_paths(path_nuevo_archivo, nombre_archivo)
         except ValueError:
             logging.error('No se pudo crear el path.')
@@ -701,6 +770,7 @@ class ValijaDigitalApp:
         observer.schedule(self.file_observer, path=self.config.PATH_ARCHIVOS, recursive=True)
         observer.start()
         logging.info('Observando directorio: %s', self.config.PATH_ARCHIVOS)
+        logging.info('Versión PIN')
         
         try:
             while True:
