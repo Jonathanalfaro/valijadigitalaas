@@ -12,8 +12,8 @@ from valija_digital import ValijaDigitalApp
 
 class ValijaDigitalService(win32serviceutil.ServiceFramework):
     _svc_name_ = "ValijaDigital"
-    _svc_display_name_ = "Valija Digital Monitor"
-    _svc_description_ = "Servicio de monitoreo de archivos para Valija Digital"
+    _svc_display_name_ = "Servicio Valija Digital"
+    _svc_description_ = "Servicio de monitoreo Valija Digital"
 
     def __init__(self, args):
         win32serviceutil.ServiceFramework.__init__(self, args)
