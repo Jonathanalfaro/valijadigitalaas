@@ -610,6 +610,9 @@ class FileObserver(FileSystemEventHandler):
         except ValueError:
             logging.error('No se pudo crear el path.')
             return
+        except Exception:
+            logging.error('No se pudo procesar el documento pues no está en una carpeta conocida.')
+            return
 
         if flujo in ['BANCOS', 'CUENTAS POR PAGAR']:
             self._process_simple_file(path_nuevo_archivo, nuevo_path, nombre)
